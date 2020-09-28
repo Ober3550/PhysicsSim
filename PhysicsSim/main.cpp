@@ -64,9 +64,10 @@ __m256i m_onesi  = _mm256_set1_epi64x(uint64_t(-1));
 
 bool runSimulation = true;
 bool drawPlane = true;
+bool draw_wire = false;
 int global_tick = 0;
 
-void drawSphere(double r, int lats, int longs) {
+void drawSphere(double x, double y, double z, double r, int lats, int longs) {
     int i, j = 0;
     for (i = 0; i <= lats; i++) {
         double lat0 = pi * (-0.5 + (double)(i - 1) / lats);
@@ -92,12 +93,89 @@ void drawSphere(double r, int lats, int longs) {
     }
 }
 
+const std::vector<std::array<float, 3>> box_vert = { {
+    {-.5f,-.5f,-.5f},
+    {-.5f,.5f,-.5f},
+    {-.5f,.5f,.5f},
+    {-.5f,-.5f,.5f},
+    {.5f,-.5f,.5f},
+    {.5f,.5f,.5f},
+    {.5f,.5f,-.5f},
+    {.5f,-.5f,-.5f}
+}};
+
+const std::vector<std::array<int, 3>> box_face = {{
+    {0,1,2},
+    {2,3,0},
+    {5,4,3},
+    {3,2,5},
+    {4,5,6},
+    {6,7,4},
+    {1,0,7},
+    {7,6,1},
+    {0,3,4},
+    {4,7,0},
+    {6,5,2},
+    {2,1,6}
+}};
+
+void drawWireFrame(const std::vector<std::array<float,3>> vert, const std::vector<std::array<int,3>>& tri, float scale = 1.f)
+{
+    glBegin(GL_LINES);
+    for (int i = 0; i < tri.size(); i++)
+    {
+        glVertex3f(vert[tri[i][0]][0] * scale, vert[tri[i][0]][1] * scale, vert[tri[i][0]][2] * scale);
+        glVertex3f(vert[tri[i][1]][0] * scale, vert[tri[i][1]][1] * scale, vert[tri[i][1]][2] * scale);
+        glVertex3f(vert[tri[i][1]][0] * scale, vert[tri[i][1]][1] * scale, vert[tri[i][1]][2] * scale);
+        glVertex3f(vert[tri[i][2]][0] * scale, vert[tri[i][2]][1] * scale, vert[tri[i][2]][2] * scale);
+        glVertex3f(vert[tri[i][2]][0] * scale, vert[tri[i][2]][1] * scale, vert[tri[i][2]][2] * scale);
+        glVertex3f(vert[tri[i][0]][0] * scale, vert[tri[i][0]][1] * scale, vert[tri[i][0]][2] * scale);
+    }
+    glEnd();
+}
+void drawFilled(const std::vector<std::array<float,3>>& vert, const std::vector<std::array<int,3>>& tri)
+{
+    glBegin(GL_TRIANGLES);
+    for (int i = 0; i < tri.size(); i++)
+    {
+        for (int j = 0; j < 3; j++)
+        {
+            glVertex3f(vert[tri[i][j]][0], vert[tri[i][j]][1], vert[tri[i][j]][2]);
+        }
+    }
+    glEnd();
+}
+
 void glLoadMatrixf(glm::mat4 matrix)
 {
     float* fM;
     fM = glm::value_ptr(matrix);
     glLoadMatrixf(fM);
 }
+
+struct GameObjectGroup {
+    __m256d AABB_x1;
+    __m256d AABB_x2;
+    __m256d AABB_y1;
+    __m256d AABB_y2;
+    __m256d AABB_z1;
+    __m256d AABB_z2;
+};
+
+class Simulation {
+public:
+    std::vector<GameObjectGroup> objects;
+    void DrawBoundingBoxes()
+    {
+        for (GameObjectGroup object_group : objects)
+        {
+            for (int j = 0; j < VECWIDTH; j++)
+            {
+                //drawWireFrame(box_vert, box_face);
+            }
+        }
+    }
+};
 
 int main()
 {
@@ -115,7 +193,7 @@ int main()
     
     // Opengl stuff -------------------------------
     
-    glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 3.0f);
+    glm::vec3 cameraPos = glm::vec3(1.0f, 0.0f, 0.0f);
     glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
     glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
     float cameraPitch = 0.f;
@@ -127,7 +205,6 @@ int main()
     glm::vec3 cameraRight = glm::normalize(glm::cross(up, cameraDirection));
     cameraUp = glm::cross(cameraDirection, cameraRight);
 
-    
     double frustRight = 1;
     double frustUp = frustRight * double(windowMiddle.y) / double(windowMiddle.x);
     double nearClip = 1.f;
@@ -138,21 +215,21 @@ int main()
     glFrustum(-frustRight, frustRight, -frustUp, frustUp, nearClip, farClip);
     glMatrixMode(GL_MODELVIEW);
 
-    GLfloat black[] = { 0.0, 0.0, 0.0, 1.0 };
-    GLfloat white[] = { 1.0, 1.0, 1.0, 1.0 };
-    GLfloat direction[] = { 0.0, 0.0, 1.0, 1.0 };
+    //GLfloat black[] = { 0.0, 0.0, 0.0, 1.0 };
+    //GLfloat white[] = { 1.0, 1.0, 1.0, 1.0 };
+    //GLfloat direction[] = { 0.0, 0.0, 1.0, 1.0 };
 
-    glMaterialfv(GL_FRONT,  GL_AMBIENT_AND_DIFFUSE, white);
-    glMaterialfv(GL_FRONT,  GL_SPECULAR,            white);
-    glMaterialf(GL_FRONT,   GL_SHININESS,           30);
+    //glMaterialfv(GL_FRONT,  GL_AMBIENT_AND_DIFFUSE, white);
+    //glMaterialfv(GL_FRONT,  GL_SPECULAR,            white);
+    //glMaterialf(GL_FRONT,   GL_SHININESS,           30);
 
-    glLightfv(GL_LIGHT0, GL_AMBIENT,  black);
-    glLightfv(GL_LIGHT0, GL_DIFFUSE,  white);
-    glLightfv(GL_LIGHT0, GL_SPECULAR, white);
-    glLightfv(GL_LIGHT0, GL_POSITION, direction);
+    //glLightfv(GL_LIGHT0, GL_AMBIENT,  black);
+    //glLightfv(GL_LIGHT0, GL_DIFFUSE,  white);
+    //glLightfv(GL_LIGHT0, GL_SPECULAR, white);
+    //glLightfv(GL_LIGHT0, GL_POSITION, direction);
 
-    glEnable(GL_LIGHTING);                // so the renderer considers light
-    glEnable(GL_LIGHT0);                  // turn LIGHT0 on
+    //glEnable(GL_LIGHTING);                // so the renderer considers light
+    //glEnable(GL_LIGHT0);                  // turn LIGHT0 on
     glEnable(GL_DEPTH_TEST);              // so the renderer considers depth
     glEnable(GL_CULL_FACE);
     glDepthFunc(GL_LESS);
@@ -160,7 +237,7 @@ int main()
     window.pushGLStates();
 
     // --------------------------------------------
-    
+    float drx = 0,dry = 0,drz = 0;
     srand(std::hash<int>{}(frameClock.getElapsedTime().asMicroseconds()));
 
     bool running = true;
@@ -212,8 +289,6 @@ int main()
             {
                 windowSize = window.getSize();
                 windowMiddle = sf::Vector2i(windowSize.x / 2, windowSize.y / 2);
-                //centreView.setSize(sf::Vector2f(windowSize.x, windowSize.y));
-                //centreView.setCenter(0, 0);
                 double ratio = double(windowSize.x) / double(windowSize.y);
                 window.popGLStates();
                 glViewport(0, 0, windowSize.x, windowSize.y);
@@ -258,7 +333,8 @@ int main()
         ImGui::SliderInt(" :THREADS", &NUM_THREADS, 1, 20);
         ImGui::Checkbox(" :Run Simulation", &runSimulation);
         ImGui::Checkbox(" :Draw Plane", &drawPlane);
-        ImGui::Text(std::string("POS : " + std::formatted_double(cameraPos.x) + "x, " +std::formatted_double(cameraPos.z) + "y, " + std::formatted_double(cameraPos.z) + "z").c_str());
+        ImGui::Checkbox(" :Draw Wire Frame", &draw_wire);
+        ImGui::Text(std::string("POS : " + std::formatted_double(cameraPos.x) + "x, " +std::formatted_double(cameraPos.y) + "y, " + std::formatted_double(cameraPos.z) + "z").c_str());
         ImGui::Text(std::string("MPOS: " + std::to_string_with_precision(mousePos.x) + "x, " + std::to_string_with_precision(mousePos.y) +"y").c_str());
         ImGui::End();
         frameClock.restart();
@@ -277,23 +353,34 @@ int main()
 
             if (drawPlane)
             {
+                float shift_down = -1.f;
                 glBegin(GL_LINES);
                 const float lines = 50;
                 const float gap = 0.5;
                 float dist = lines * gap * 0.5;
                 for (GLfloat i = -dist; i <= dist; i += gap) {
-                    glVertex3f(i, 0, dist); glVertex3f(i, 0, -dist);
-                    glVertex3f(dist, 0, i); glVertex3f(-dist, 0, i);
+                    glVertex3f(i, shift_down, dist); glVertex3f(i, shift_down, -dist);
+                    glVertex3f(dist, shift_down, i); glVertex3f(-dist, shift_down, i);
                 }
                 glEnd();
             }
+            drx += 0.5f;
+            dry += 0.3f;
+            drz += 0.2f;
+            glRotatef(drx, 1, 0, 0);
+            glRotatef(dry, 0, 1, 0);
+            glRotatef(drz, 0, 0, 1);
+            if (!draw_wire)
+            {
+                drawFilled(box_vert, box_face);
+                glColor3f(0.f, 0.f, 0.f);
+            }
+            drawWireFrame(box_vert, box_face, 1.01f);
             
             glCullFace(GL_FRONT);
             glFlush();
             window.pushGLStates();
         }
-        //sf::ContextSettings windowSettings = window.getSettings();
-        //std::cout << "windowSettings.DepthBits: " << windowSettings.depthBits << "\n";
         ImGui::SFML::Render(window);
         window.display();
     }
